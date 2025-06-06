@@ -1,25 +1,15 @@
 <script lang="ts">
   import ArtSearch from "./lib/ArtSearch.svelte";
-  import Welcome from "./lib/Welcome.svelte";
 
-  const navigationType = (
-    window.performance.getEntriesByType(
-      "navigation"
-    )[0] as PerformanceNavigationTiming
-  )?.type;
-
-  let welcome = !navigationType || navigationType === "navigate"; // @hmr:keep
+  // The Welcome component and its related logic (navigationType, welcome variable)
+  // have been removed. The logo button no longer needs an on:click handler
+  // to show the welcome screen.
 </script>
-
-<Welcome open={welcome} on:close={() => (welcome = false)} />
 
 <ArtSearch />
 
 <div class="absolute top-4 left-4 sm:top-8 sm:left-8">
-  <button
-    class="logo-btn text-3xl fontvar-heading"
-    on:click={() => (welcome = true)}>dispict</button
-  >
+  <button class="logo-btn text-3xl fontvar-heading">My Portfolio</button>
 </div>
 
 <style lang="postcss">

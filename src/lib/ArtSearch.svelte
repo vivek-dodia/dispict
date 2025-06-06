@@ -7,7 +7,7 @@
   import ArtImage from "./ArtImage.svelte";
   import SearchInput from "./SearchInput.svelte";
   import Sidebar from "./Sidebar.svelte";
-  import { loadSuggestions, type Artwork, type SearchResult } from "./api";
+  import { loadLocalImages, type Artwork } from "./api";
   import { layoutArtwork, PIXELS_PER_CM } from "./geometry";
   import { TouchZoom } from "./touchZoom";
 
@@ -55,8 +55,12 @@
   let lastMove = 0;
 
   let selected: Artwork | null = null;
+  let allArtworks: Artwork[] = []; // Store all artworks loaded from JSON
 
-  onMount(() => {
+  onMount(async () => {
+    // Load all artworks once on mount
+    await updateResults();
+
     touchZoom = new TouchZoom(frame);
     touchZoom.onMove((manual) => {
       center = touchZoom.center;
@@ -140,35 +144,64 @@
     }
   }
 
-  let results: SearchResult[] = [];
+  let results: Artwork[] = []; // This will hold the filtered results
   let apiError: string | null = null;
   let searching = 0;
+  // Abort controller might not be strictly necessary for local fetch,
+  // but keeping it for now in case of future changes.
   let abortController = new AbortController();
 
-  async function updateResults(query: string) {
+  async function updateResults() {
     selected = null;
     searching++;
+    // For local fetch, abortController might not be used in loadLocalImages
+    // but it's good practice if the API could be slow or remote in the future.
     abortController.abort();
     const ctrl = new AbortController();
     abortController = ctrl;
-    results = [];
+
     try {
-      if (!query) return;
-      results = await loadSuggestions(query, 64, ctrl.signal);
+      // Load all artworks. No query or signal needed for loadLocalImages.
+      allArtworks = await loadLocalImages();
       apiError = null;
     } catch (error: any) {
+      // Error handling for local file fetch
       if (!ctrl.signal.aborted) {
-        apiError = "There was an error finding the artwork.";
+        apiError = "Error loading artwork data. Please check public/photos/metadata.json.";
+        console.error(error);
       }
+      allArtworks = []; // Ensure it's an empty array on error
     } finally {
       searching--;
     }
   }
 
-  const updateResultsDebounced = debounce(updateResults, 150);
-  $: updateResultsDebounced(query);
+  // No debounce needed if filtering is fast locally.
+  // If allArtworks is large, debounce might be useful again.
+  $: {
+    if (!query) {
+      results = allArtworks;
+    } else {
+      const lowerCaseQuery = query.toLowerCase();
+      results = allArtworks.filter((artwork) => {
+        return (
+          artwork.title?.toLowerCase().includes(lowerCaseQuery) ||
+          artwork.description?.toLowerCase().includes(lowerCaseQuery) ||
+          artwork.people?.some(p => p.toLowerCase().includes(lowerCaseQuery)) ||
+          artwork.dated?.toLowerCase().includes(lowerCaseQuery) ||
+          artwork.culture?.toLowerCase().includes(lowerCaseQuery) ||
+          artwork.department?.toLowerCase().includes(lowerCaseQuery) ||
+          artwork.medium?.toLowerCase().includes(lowerCaseQuery) ||
+          artwork.technique?.toLowerCase().includes(lowerCaseQuery) ||
+          artwork.classification?.toLowerCase().includes(lowerCaseQuery)
+        );
+      });
+    }
+    // Reset selection when query changes and thus results change
+    selected = null;
+  }
 
-  $: positions = layoutArtwork(results.map((r) => r.artwork));
+  $: positions = layoutArtwork(results); // Use results directly
 </script>
 
 <main class="absolute inset-0 overflow-hidden bg-gray-50">
@@ -191,8 +224,8 @@
       {/if}
     </div>
 
-    {#each results as result, i (result)}
-      {@const detail = getDetail(result.artwork, positions[i], center, zoom)}
+    {#each results as artwork, i (artwork.id)}
+      {@const detail = getDetail(artwork, positions[i], center, zoom)}
       <div
         class="absolute"
         style:transform={getTransform(positions[i], center, zoom)}
@@ -200,13 +233,13 @@
       >
         <button
           class="cursor-default"
-          on:click={() => handleSelect(result.artwork, positions[i])}
-          on:touchend={() => handleSelect(result.artwork, positions[i])}
+          on:click={() => handleSelect(artwork, positions[i])}
+          on:touchend={() => handleSelect(artwork, positions[i])}
         >
           <ArtImage
-            artwork={result.artwork}
+            artwork={artwork}
             {detail}
-            grayed={Boolean(selected) && selected !== result.artwork}
+            grayed={Boolean(selected) && selected !== artwork}
           />
         </button>
       </div>
